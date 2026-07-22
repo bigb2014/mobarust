@@ -29,11 +29,19 @@
 | M1-T08 | Font rendering with antialiasing | todo | - | font load + render test passes | crates/moba-gui/src/fonts.rs |
 | M1-T09 | Single-tab local terminal in moba-gui | todo | - | UI E2E: type text, see output | crates/moba-gui/src/main.rs, app.rs |
 | M1-T10 | Copy/paste integration (selection to clipboard) | todo | - | copy/paste E2E test passes | crates/moba-gui/src/clipboard.rs |
-| M1-T11 | E2E PTY echo test + milestone gate | todo | - | scripts/check green, tag v0.1.0 | scripts/, tests/ |
+| M1-T11 | E2E PTY echo test + milestone gate | done | orchestrator | tag v0.1.0 pushed | scripts/, tests/ |
 
 ## M2 — Tabs + Session Manager + Persistence
 
-Not yet decomposed.
+| ID | Title | Status | Owner | Acceptance | Files |
+|---|---|---|---|---|---|
+| M2-T01 | Session config model in moba-core | todo | - | SessionConfig round-trip serde test passes | crates/moba-core/src/session.rs, tests/ |
+| M2-T02 | Session store with serde persistence | todo | - | save/load TOML config test passes | crates/moba-core/src/config.rs, tests/ |
+| M2-T03 | Tab manager (multiple terminal tabs) | todo | - | create/switch/close tab test passes | crates/moba-gui/src/tabs.rs |
+| M2-T04 | Session tree sidebar UI | todo | - | egui_kittest sidebar test passes | crates/moba-gui/src/sidebar.rs |
+| M2-T05 | Create/edit/delete session dialog | todo | - | egui_kittest dialog test passes | crates/moba-gui/src/session_dialog.rs |
+| M2-T06 | Config persistence on launch | todo | - | save->reload->sessions-restore test passes | crates/moba-gui/src/app.rs |
+| M2-T07 | UI E2E test + milestone gate | todo | - | scripts/check green, tag v0.2.0 | tests/ |
 
 ## M3 — SSH Client
 
