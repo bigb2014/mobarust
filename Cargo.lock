@@ -310,14 +310,26 @@ dependencies = [
 
 [[package]]
 name = "argon2"
+version = "0.5.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3c3610892ee6e0cbce8ae2700349fcf8f98adb0dbfbee85aec3c9179d29cc072"
+dependencies = [
+ "base64ct",
+ "blake2 0.10.6",
+ "cpufeatures 0.2.17",
+ "password-hash 0.5.0",
+]
+
+[[package]]
+name = "argon2"
 version = "0.6.0-rc.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7af50940b73bf4e16c15c448a2b121c63f2d68e3e54b6a8731673cb4aa0cdff5"
 dependencies = [
  "base64ct",
- "blake2",
+ "blake2 0.11.0-rc.6",
  "cpufeatures 0.3.0",
- "password-hash",
+ "password-hash 0.6.1",
 ]
 
 [[package]]
@@ -640,6 +652,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b588b76d00fde79687d7646a9b5bdf3cc0f655e0bbd080335a95d7e96f3587da"
 dependencies = [
  "serde_core",
+]
+
+[[package]]
+name = "blake2"
+version = "0.10.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "46502ad458c9a52b69d4d4d32775c788b7a1b85e8bc9d482d92250fc0e3f8efe"
+dependencies = [
+ "digest 0.10.7",
 ]
 
 [[package]]
@@ -3101,6 +3122,7 @@ dependencies = [
  "moba-core",
  "moba-term",
  "serde",
+ "serde_json",
  "thiserror 2.0.19",
  "tokio",
  "tracing",
@@ -3200,11 +3222,16 @@ dependencies = [
 name = "moba-vault"
 version = "0.0.1"
 dependencies = [
+ "aes-gcm 0.11.0",
+ "argon2 0.5.3",
  "moba-core",
+ "rand 0.10.2",
  "serde",
+ "serde_json",
  "thiserror 2.0.19",
  "tokio",
  "tracing",
+ "zeroize",
 ]
 
 [[package]]
@@ -3923,6 +3950,17 @@ dependencies = [
  "redox_syscall 0.5.18",
  "smallvec",
  "windows-link",
+]
+
+[[package]]
+name = "password-hash"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "346f04948ba92c43e8469c1ee6736c7563d71012b17d40745260fe106aac2166"
+dependencies = [
+ "base64ct",
+ "rand_core 0.6.4",
+ "subtle",
 ]
 
 [[package]]
@@ -5557,7 +5595,7 @@ version = "0.7.0-rc.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f9a32fae177b74a22aa9c5b01bf7e68b33545be32d9e381e248058d2adc15ce3"
 dependencies = [
- "argon2",
+ "argon2 0.6.0-rc.8",
  "bcrypt-pbkdf 0.11.0",
  "ctutils",
  "ed25519-dalek 3.0.0",
@@ -7266,6 +7304,20 @@ name = "zeroize"
 version = "1.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e13c156562582aa81c60cb29407084cdb54c4164760106ab78e6c5b0858cf64e"
+dependencies = [
+ "zeroize_derive",
+]
+
+[[package]]
+name = "zeroize_derive"
+version = "1.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3c50655cbb0fe3fc43170059e702f1ce5e19b84cec58dc87b037a09935c2f328"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.119",
+]
 
 [[package]]
 name = "zerotrie"

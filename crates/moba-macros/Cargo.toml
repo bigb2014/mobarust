@@ -12,3 +12,4 @@ tracing = { workspace = true }
 tokio = { workspace = true }
 moba-core = { workspace = true }
 moba-term = { workspace = true }
+serde_json.workspace = true
