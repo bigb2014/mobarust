@@ -9,11 +9,13 @@
 #![warn(missing_docs)]
 
 pub mod grid;
+pub mod pty;
 pub mod scrollback;
 pub mod selection;
 pub mod vt_parser;
 
 pub use grid::{Attributes, Cell, ClearMode, Color, Cursor, Grid};
+pub use pty::{PtySession, TermError};
 pub use scrollback::{Line, Scrollback, Style};
 pub use selection::{Position, Selection, SelectionMode, TextGrid};
 pub use vt_parser::Terminal;

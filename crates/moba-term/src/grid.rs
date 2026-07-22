@@ -479,6 +479,33 @@ impl Grid {
         }
         out
     }
+
+    /// Resize the grid to `new_rows` x `new_cols`.
+    ///
+    /// Existing content that fits within the new dimensions is preserved.
+    /// Cells in the expanded region are filled with blank cells. Content
+    /// that no longer fits (rows or columns beyond the new bounds) is
+    /// discarded -- lines are truncated, not rewrapped. The cursor is
+    /// clamped to the new bounds.
+    pub fn resize(&mut self, new_rows: usize, new_cols: usize) {
+        // Build the new cell buffer by copying overlapping cells.
+        let mut new_cells = vec![Cell::blank(); new_rows * new_cols];
+        let copy_rows = self.rows.min(new_rows);
+        let copy_cols = self.cols.min(new_cols);
+        for r in 0..copy_rows {
+            for c in 0..copy_cols {
+                let src = r * self.cols + c;
+                let dst = r * new_cols + c;
+                new_cells[dst] = self.cells[src];
+            }
+        }
+        self.rows = new_rows;
+        self.cols = new_cols;
+        self.cells = new_cells;
+        // Clamp cursor to new bounds.
+        self.cursor.row = self.cursor.row.min(self.rows.saturating_sub(1));
+        self.cursor.col = self.cursor.col.min(self.cols.saturating_sub(1));
+    }
 }
 
 #[cfg(test)]
@@ -642,5 +669,160 @@ mod tests {
         assert_eq!(g.cell(0, 0).map(|c| c.ch), Some('B'));
         assert_eq!(g.cell(1, 0).map(|c| c.ch), Some('C'));
         assert_eq!(g.cell(2, 0).map(|c| c.ch), Some(' '));
+    }
+
+    // --- Resize / reflow ---
+
+    #[test]
+    fn resize_larger_adds_blank_rows() {
+        let mut g = Grid::new(2, 5);
+        // Fill row 0 with "ABCDE".
+        for c in 0..5 {
+            g.move_cursor(0, c);
+            g.write_char((b'A' + c as u8) as char, Attributes::default());
+        }
+        // Fill row 1 with "FGHIJ".
+        for c in 0..5 {
+            g.move_cursor(1, c);
+            g.write_char((b'F' + c as u8) as char, Attributes::default());
+        }
+        g.resize(4, 5);
+        assert_eq!(g.rows(), 4);
+        assert_eq!(g.cols(), 5);
+        // Old content preserved.
+        assert_eq!(g.cell(0, 0).map(|c| c.ch), Some('A'));
+        assert_eq!(g.cell(0, 4).map(|c| c.ch), Some('E'));
+        assert_eq!(g.cell(1, 0).map(|c| c.ch), Some('F'));
+        assert_eq!(g.cell(1, 4).map(|c| c.ch), Some('J'));
+        // New rows are blank.
+        for c in 0..5 {
+            assert_eq!(g.cell(2, c).map(|c| c.ch), Some(' '));
+            assert_eq!(g.cell(3, c).map(|c| c.ch), Some(' '));
+        }
+    }
+
+    #[test]
+    fn resize_smaller_truncates() {
+        let mut g = Grid::new(4, 5);
+        // Fill all 4 rows with distinct characters.
+        for r in 0..4 {
+            for c in 0..5 {
+                g.move_cursor(r, c);
+                g.write_char((b'A' + (r * 5 + c) as u8) as char, Attributes::default());
+            }
+        }
+        g.resize(2, 5);
+        assert_eq!(g.rows(), 2);
+        assert_eq!(g.cols(), 5);
+        // Only first 2 rows remain.
+        assert_eq!(g.cell(0, 0).map(|c| c.ch), Some('A'));
+        assert_eq!(g.cell(0, 4).map(|c| c.ch), Some('E'));
+        assert_eq!(g.cell(1, 0).map(|c| c.ch), Some('F'));
+        assert_eq!(g.cell(1, 4).map(|c| c.ch), Some('J'));
+        // Rows 2 and 3 are gone.
+        assert!(g.cell(2, 0).is_none());
+    }
+
+    #[test]
+    fn resize_wider_adds_blank_cols() {
+        let mut g = Grid::new(2, 3);
+        // Fill row 0 with "ABC".
+        for c in 0..3 {
+            g.move_cursor(0, c);
+            g.write_char((b'A' + c as u8) as char, Attributes::default());
+        }
+        // Fill row 1 with "DEF".
+        for c in 0..3 {
+            g.move_cursor(1, c);
+            g.write_char((b'D' + c as u8) as char, Attributes::default());
+        }
+        g.resize(2, 5);
+        assert_eq!(g.rows(), 2);
+        assert_eq!(g.cols(), 5);
+        // Old content preserved.
+        assert_eq!(g.cell(0, 0).map(|c| c.ch), Some('A'));
+        assert_eq!(g.cell(0, 2).map(|c| c.ch), Some('C'));
+        assert_eq!(g.cell(1, 0).map(|c| c.ch), Some('D'));
+        assert_eq!(g.cell(1, 2).map(|c| c.ch), Some('F'));
+        // New columns are blank.
+        assert_eq!(g.cell(0, 3).map(|c| c.ch), Some(' '));
+        assert_eq!(g.cell(0, 4).map(|c| c.ch), Some(' '));
+        assert_eq!(g.cell(1, 3).map(|c| c.ch), Some(' '));
+        assert_eq!(g.cell(1, 4).map(|c| c.ch), Some(' '));
+    }
+
+    #[test]
+    fn resize_narrower_truncates_cols() {
+        let mut g = Grid::new(2, 5);
+        // Fill row 0 with "ABCDE".
+        for c in 0..5 {
+            g.move_cursor(0, c);
+            g.write_char((b'A' + c as u8) as char, Attributes::default());
+        }
+        // Fill row 1 with "FGHIJ".
+        for c in 0..5 {
+            g.move_cursor(1, c);
+            g.write_char((b'F' + c as u8) as char, Attributes::default());
+        }
+        g.resize(2, 3);
+        assert_eq!(g.rows(), 2);
+        assert_eq!(g.cols(), 3);
+        // Only first 3 columns remain.
+        assert_eq!(g.cell(0, 0).map(|c| c.ch), Some('A'));
+        assert_eq!(g.cell(0, 2).map(|c| c.ch), Some('C'));
+        assert_eq!(g.cell(1, 0).map(|c| c.ch), Some('F'));
+        assert_eq!(g.cell(1, 2).map(|c| c.ch), Some('H'));
+        // Column 3 and beyond are gone.
+        assert!(g.cell(0, 3).is_none());
+    }
+
+    #[test]
+    fn resize_clamps_cursor() {
+        let mut g = Grid::new(5, 5);
+        g.move_cursor(4, 4);
+        assert_eq!(g.cursor(), Cursor { row: 4, col: 4 });
+        g.resize(3, 3);
+        assert_eq!(g.rows(), 3);
+        assert_eq!(g.cols(), 3);
+        // Cursor clamped to new bounds: (2, 2).
+        assert_eq!(g.cursor(), Cursor { row: 2, col: 2 });
+    }
+
+    #[test]
+    fn resize_preserves_content() {
+        let mut g = Grid::new(3, 3);
+        // Fill with a pattern: each cell = 'A' + (row*3 + col).
+        for r in 0..3 {
+            for c in 0..3 {
+                g.move_cursor(r, c);
+                g.write_char((b'A' + (r * 3 + c) as u8) as char, Attributes::default());
+            }
+        }
+        // Resize larger: 5x5.
+        g.resize(5, 5);
+        assert_eq!(g.rows(), 5);
+        assert_eq!(g.cols(), 5);
+        // Original 3x3 content survives.
+        for r in 0..3 {
+            for c in 0..3 {
+                let expected = (b'A' + (r * 3 + c) as u8) as char;
+                assert_eq!(g.cell(r, c).map(|cell| cell.ch), Some(expected));
+            }
+        }
+        // New cells are blank.
+        assert_eq!(g.cell(3, 0).map(|c| c.ch), Some(' '));
+        assert_eq!(g.cell(4, 4).map(|c| c.ch), Some(' '));
+        assert_eq!(g.cell(0, 3).map(|c| c.ch), Some(' '));
+        // Resize back smaller: 3x3.
+        g.resize(3, 3);
+        assert_eq!(g.rows(), 3);
+        assert_eq!(g.cols(), 3);
+        // Original 3x3 content still survives.
+        for r in 0..3 {
+            for c in 0..3 {
+                let expected = (b'A' + (r * 3 + c) as u8) as char;
+                assert_eq!(g.cell(r, c).map(|cell| cell.ch), Some(expected));
+            }
+        }
     }
 }
