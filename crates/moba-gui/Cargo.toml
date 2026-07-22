@@ -30,6 +30,7 @@ moba-macros = { workspace = true }
 eframe = "0.35.0"
 egui = "0.35.0"
 epi = "0.17.0"
+tracing-subscriber.workspace = true
 
 [dev-dependencies]
 egui_kittest = "0.35.0"

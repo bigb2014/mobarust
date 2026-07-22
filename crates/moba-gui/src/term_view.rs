@@ -65,7 +65,7 @@ impl Default for TermViewConfig {
 }
 
 /// Callback type for sending user input bytes to the PTY.
-pub type InputHandler = Box<dyn FnMut(&[u8])>;
+pub type InputHandler<'a> = Box<dyn FnMut(&[u8]) + 'a>;
 
 /// A terminal view widget that renders a `Terminal` in an egui UI.
 ///
@@ -78,16 +78,15 @@ pub struct TermView<'a> {
     /// Configuration (font size, dimensions).
     pub config: TermViewConfig,
     /// Callback for bytes typed by the user (sent to PTY).
-    pub input_handler: InputHandler,
+    pub input_handler: InputHandler<'a>,
 }
 
 impl<'a> TermView<'a> {
     /// Creates a new terminal view.
-    pub fn new(
-        terminal: &'a mut Terminal,
-        config: TermViewConfig,
-        input_handler: impl FnMut(&[u8]) + 'static,
-    ) -> Self {
+    pub fn new<F>(terminal: &'a mut Terminal, config: TermViewConfig, input_handler: F) -> Self
+    where
+        F: FnMut(&[u8]) + 'a,
+    {
         Self {
             terminal,
             config,
