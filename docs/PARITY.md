@@ -4,8 +4,8 @@
 
 | MX Feature | MobaRust Milestone | Status | Proving Test(s) |
 |---|---|---|---|
-| Tabbed terminal, antialiased fonts | M1 | not started | |
-| Local Unix-command shell in terminal | M1 (basic) / M9 (embedded) | not started | |
+| Tabbed terminal, antialiased fonts | M1 | done | grid tests, vt_parser tests, pty_test.rs, term_view tests |
+| Local Unix-command shell in terminal | M1 (basic) / M9 (embedded) | partial | PtySession spawns /bin/bash locally; embedded userland deferred to M9 |
 | Session manager (SSH/Telnet/Rlogin/RDP/VNC/XDMCP/FTP/SFTP/Serial) | M2 + M8 | not started | |
 | SSH client (auth, known_hosts, keepalive) | M3 | not started | |
 | Graphical SFTP browser (auto-popup, drag-drop) | M4 | not started | |
