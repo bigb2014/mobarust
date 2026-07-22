@@ -1,108 +1,158 @@
-//! MobaRust application: single-tab local terminal.
+//! MobaRust application: multi-tab terminal with session sidebar.
 //!
-//! Ties together the PTY session, terminal engine, and egui renderer
-//! into a working terminal application.
+//! Ties together the tab manager, session sidebar, session dialog,
+//! terminal engine, and egui renderer into a working terminal app.
 
 use eframe::egui;
-use moba_term::pty::PtySession;
-use moba_term::Terminal;
+
+use crate::session_dialog::{DialogResult, SessionDialog};
+use crate::sidebar::Sidebar;
+use crate::tabs::TabManager;
 
 /// The MobaRust application state.
 pub struct MobaApp {
-    /// The terminal engine (VT parser + grid).
-    terminal: Terminal,
-    /// The PTY session.
-    pty: Option<PtySession>,
-    /// Buffer of input bytes to send to PTY.
-    input_buf: Vec<u8>,
-    /// Whether the terminal is still alive.
-    alive: bool,
+    /// Tab manager owning all terminal sessions.
+    tabs: TabManager,
+    /// Session sidebar (left panel).
+    sidebar: Sidebar,
+    /// Session create/edit/delete dialog.
+    dialog: SessionDialog,
 }
 
 impl MobaApp {
-    /// Creates a new MobaRust app with a local PTY shell.
+    /// Creates a new MobaRust app with an initial local shell tab.
     ///
     /// # Errors
-    /// Returns an error if the PTY cannot be spawned.
+    /// Returns an error if the initial PTY cannot be spawned.
     pub fn new(rows: usize, cols: usize) -> Result<Self, String> {
-        let terminal = Terminal::new(rows, cols);
-        let pty = PtySession::new(rows, cols).map_err(|e| format!("pty spawn failed: {e}"))?;
+        let mut tabs = TabManager::new(rows, cols);
+        tabs.new_tab(Some("Local Shell"))?;
 
         Ok(Self {
-            terminal,
-            pty: Some(pty),
-            input_buf: Vec::new(),
-            alive: true,
+            tabs,
+            sidebar: Sidebar::new(),
+            dialog: SessionDialog::new(),
         })
+    }
+
+    /// Returns a reference to the tab manager.
+    #[must_use]
+    pub fn tabs(&self) -> &TabManager {
+        &self.tabs
+    }
+
+    /// Returns a mutable reference to the tab manager.
+    pub fn tabs_mut(&mut self) -> &mut TabManager {
+        &mut self.tabs
+    }
+
+    /// Returns a mutable reference to the sidebar.
+    pub fn sidebar_mut(&mut self) -> &mut Sidebar {
+        &mut self.sidebar
     }
 }
 
 impl eframe::App for MobaApp {
     fn logic(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        // Process PTY output and input in the logic pass.
-        if let Some(ref mut pty) = self.pty {
-            if self.alive {
-                // Try to read from the PTY.
-                let mut buf = [0u8; 4096];
-                match pty.read(&mut buf) {
-                    Ok(0) => {
-                        self.alive = false;
-                    }
-                    Ok(n) => {
-                        self.terminal.process(&buf[..n]);
-                    }
-                    Err(ref e) => {
-                        // TermError wraps io::Error; check the inner error.
-                        if let moba_term::pty::TermError::Io(ref io_err) = e {
-                            if io_err.kind() == std::io::ErrorKind::WouldBlock
-                                || io_err.kind() == std::io::ErrorKind::TimedOut
-                            {
-                                // Non-blocking read with no data, fine.
-                            }
-                        } else {
-                            tracing::warn!("pty read error: {e}");
-                            self.alive = false;
-                        }
-                    }
-                }
+        self.tabs.poll_all();
 
-                // Send any pending input.
-                if !self.input_buf.is_empty() {
-                    if let Err(e) = pty.write(&self.input_buf) {
-                        tracing::warn!("pty write error: {e}");
-                    }
-                    self.input_buf.clear();
-                }
+        if self.tabs.tabs().iter().any(|t| t.alive) {
+            ctx.request_repaint();
+        }
 
-                if !pty.is_alive() {
-                    self.alive = false;
+        for action in self.sidebar.drain_actions() {
+            match action {
+                crate::sidebar::SidebarAction::NewSession => {
+                    self.dialog.open_create();
                 }
+                crate::sidebar::SidebarAction::OpenSession(_) => {
+                    let _ = self.tabs.new_tab(Some("New Session"));
+                }
+                crate::sidebar::SidebarAction::EditSession(_) => {
+                    self.dialog.open_create();
+                }
+                crate::sidebar::SidebarAction::DeleteSession(_) => {}
             }
         }
 
-        if self.alive {
-            ctx.request_repaint();
+        if let Some(result) = self.dialog.show(ctx) {
+            match result {
+                DialogResult::Save(_) => {
+                    let _ = self.tabs.new_tab(Some("New Session"));
+                }
+                DialogResult::Delete(_) => {}
+                DialogResult::Cancel => {}
+            }
         }
     }
 
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
-        let config = crate::term_view::TermViewConfig::default();
-        let mut local_input: Vec<u8> = Vec::new();
-        let input_ref = &mut local_input;
-        let term_view =
-            crate::term_view::TermView::new(&mut self.terminal, config, move |bytes: &[u8]| {
-                input_ref.extend_from_slice(bytes);
+        self.sidebar.show(ui);
+
+        let mut close_index: Option<usize> = None;
+        let mut switch_index: Option<usize> = None;
+        let mut add_tab = false;
+
+        egui::Panel::top("tab_bar")
+            .show_separator_line(false)
+            .show(ui, |ui| {
+                ui.horizontal(|ui| {
+                    for (i, tab) in self.tabs.tabs().iter().enumerate() {
+                        let is_active = self.tabs.active_index() == Some(i);
+                        let label = format!("{} {}", if is_active { ">" } else { " " }, tab.label);
+                        if ui.selectable_label(is_active, &label).clicked() {
+                            switch_index = Some(i);
+                        }
+                        if ui.button("x").clicked() {
+                            close_index = Some(i);
+                        }
+                    }
+                    if ui.button("+").clicked() {
+                        add_tab = true;
+                    }
+                });
             });
-        term_view.show(ui);
-        if !local_input.is_empty() {
-            self.input_buf.extend_from_slice(&local_input);
+
+        if let Some(i) = switch_index {
+            self.tabs.switch_to(i);
+        }
+        if let Some(i) = close_index {
+            self.tabs.close_tab(i);
+        }
+        if add_tab {
+            let _ = self.tabs.new_tab(Some("New Tab"));
         }
 
-        if !self.alive {
-            ui.label(
-                egui::RichText::new("[process exited]")
-                    .color(egui::Color32::from_rgb(0xff, 0x80, 0x80)),
-            );
-        }
+        egui::CentralPanel::default().show(ui, |ui| {
+            if let Some(tab_index) = self.tabs.active_index() {
+                if let Some(tab) = self.tabs.tabs_mut().get_mut(tab_index) {
+                    let config = crate::term_view::TermViewConfig::default();
+                    let mut local_input: Vec<u8> = Vec::new();
+                    let input_ref = &mut local_input;
+                    let term_view = crate::term_view::TermView::new(
+                        &mut tab.terminal,
+                        config,
+                        move |bytes: &[u8]| {
+                            input_ref.extend_from_slice(bytes);
+                        },
+                    );
+                    term_view.show(ui);
+                    if !local_input.is_empty() {
+                        tab.send_input(&local_input);
+                    }
+
+                    if !tab.alive {
+                        ui.label(
+                            egui::RichText::new("[process exited]")
+                                .color(egui::Color32::from_rgb(0xff, 0x80, 0x80)),
+                        );
+                    }
+                }
+            } else {
+                ui.vertical_centered(|ui| {
+                    ui.label("No tabs open. Click + to open a new tab.");
+                });
+            }
+        });
     }
 }

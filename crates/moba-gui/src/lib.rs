@@ -6,9 +6,13 @@
 #![warn(missing_docs)]
 
 pub mod app;
+pub mod session_dialog;
+pub mod sidebar;
 pub mod tabs;
 pub mod term_view;
 
 pub use app::MobaApp;
+pub use session_dialog::{DialogMode, DialogResult, SessionDialog, SessionForm};
+pub use sidebar::{Sidebar, SidebarAction};
 pub use tabs::{TabManager, TerminalTab};
 pub use term_view::{TermView, TermViewConfig};
