@@ -3082,6 +3082,7 @@ version = "0.0.1"
 dependencies = [
  "moba-core",
  "serde",
+ "serde_json",
  "thiserror 2.0.19",
  "tokio",
  "tracing",
@@ -3145,6 +3146,7 @@ version = "0.0.1"
 dependencies = [
  "moba-core",
  "serde",
+ "serde_json",
  "thiserror 2.0.19",
  "tokio",
  "tracing",
@@ -3156,6 +3158,7 @@ version = "0.0.1"
 dependencies = [
  "moba-core",
  "serde",
+ "serde_json",
  "thiserror 2.0.19",
  "tokio",
  "tracing",
@@ -3240,6 +3243,7 @@ version = "0.0.1"
 dependencies = [
  "moba-core",
  "serde",
+ "serde_json",
  "thiserror 2.0.19",
  "tokio",
  "tracing",
@@ -3252,6 +3256,7 @@ dependencies = [
  "moba-core",
  "moba-ssh",
  "serde",
+ "serde_json",
  "thiserror 2.0.19",
  "tokio",
  "tracing",
