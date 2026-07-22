@@ -34,7 +34,7 @@ impl PortScanner {
     /// Return the canonical list of common ports scanned by
     /// [`Self::scan_common`].
     ///
-    /// This is a static list and is safe to call from any context — it
+    /// This is a static list and is safe to call from any context -- it
     /// performs no I/O.
     #[must_use]
     pub fn common_ports() -> Vec<u16> {
@@ -57,13 +57,13 @@ impl PortScanner {
     /// Probe a single `(host, port)` pair using a TCP connect.
     ///
     /// Returns `true` when the connection completes within `timeout`,
-    /// `false` on any error or timeout.  The function never panics —
+    /// `false` on any error or timeout.  The function never panics --
     /// callers should treat a `false` result as "not reachable".
     ///
     /// # Arguments
-    /// * `host` — hostname or IP literal (e.g. `"192.168.1.1"`).
-    /// * `port` — target TCP port.
-    /// * `timeout` — maximum time to wait for the connect to finish.
+    /// * `host` -- hostname or IP literal (e.g. `"192.168.1.1"`).
+    /// * `port` -- target TCP port.
+    /// * `timeout` -- maximum time to wait for the connect to finish.
     pub async fn scan_port(&self, host: &str, port: u16, timeout: Duration) -> bool {
         let addr = format!("{host}:{port}");
         let probe = async {

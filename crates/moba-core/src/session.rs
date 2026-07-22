@@ -153,7 +153,7 @@ fn iso8601_now() -> String {
 /// Converts a Unix epoch seconds value into UTC calendar components.
 ///
 /// This is a minimal civil-from-days implementation (Howard Hinnant's
-/// algorithm) — no external date crate required.
+/// algorithm) -- no external date crate required.
 ///
 /// # Returns
 /// `(year, month, day, hour, minute, second)` all as `i32`.

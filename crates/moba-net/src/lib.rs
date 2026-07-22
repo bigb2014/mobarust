@@ -1,6 +1,6 @@
 //! Network utilities crate for MobaRust.
 //!
-//! Provides lightweight network diagnostic helpers — port scanning,
+//! Provides lightweight network diagnostic helpers -- port scanning,
 //! TCP-based "ping", and shared error types.  See `docs/TASKS.md` for
 //! the current task ledger and `docs/PARITY.md` for the feature-parity
 //! matrix.

@@ -153,7 +153,7 @@ impl TelnetParser {
                         self.sb_data.clear();
                         self.state = ParseState::Data;
                     } else {
-                        // IAC inside SB data — add it to the buffer.
+                        // IAC inside SB data -- add it to the buffer.
                         self.sb_data.push(byte);
                         self.state = ParseState::Sb;
                     }
