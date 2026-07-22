@@ -12,3 +12,12 @@ tracing = { workspace = true }
 tokio = { workspace = true }
 moba-core = { workspace = true }
 moba-ssh = { workspace = true }
+russh-sftp = "2.3.0"
+russh = "0.62.4"
+
+[dev-dependencies]
+serde_json.workspace = true
+
+[features]
+default = []
+e2e = []
