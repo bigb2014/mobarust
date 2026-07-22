@@ -1,0 +1,25 @@
+[package]
+name = "moba-gui"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+serde = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+tokio = { workspace = true }
+moba-core = { workspace = true }
+moba-term = { workspace = true }
+moba-ssh = { workspace = true }
+moba-sftp = { workspace = true }
+moba-serial = { workspace = true }
+moba-telnet = { workspace = true }
+moba-rdp = { workspace = true }
+moba-vnc = { workspace = true }
+moba-x11 = { workspace = true }
+moba-vault = { workspace = true }
+moba-net = { workspace = true }
+moba-editor = { workspace = true }
+moba-macros = { workspace = true }

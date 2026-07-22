@@ -1,0 +1,62 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/moba-core",
+    "crates/moba-term",
+    "crates/moba-ssh",
+    "crates/moba-sftp",
+    "crates/moba-serial",
+    "crates/moba-telnet",
+    "crates/moba-rdp",
+    "crates/moba-vnc",
+    "crates/moba-x11",
+    "crates/moba-vault",
+    "crates/moba-net",
+    "crates/moba-editor",
+    "crates/moba-macros",
+    "crates/moba-gui",
+]
+
+[workspace.package]
+version = "0.0.1"
+edition = "2021"
+license = "Apache-2.0"
+rust-version = "1.97.0"
+repository = "https://github.com/bigb2014/mobarust"
+homepage = "https://github.com/bigb2014/mobarust"
+
+[workspace.dependencies]
+# Shared across crates
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+toml = "0.8"
+thiserror = "2.0"
+anyhow = "1.0"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tokio = { version = "1.0", features = ["full"] }
+zeroize = { version = "1.8", features = ["derive"] }
+clap = { version = "4.5", features = ["derive"] }
+directories = "5.0"
+
+# Internal crate references
+moba-core = { path = "crates/moba-core" }
+moba-term = { path = "crates/moba-term" }
+moba-ssh = { path = "crates/moba-ssh" }
+moba-sftp = { path = "crates/moba-sftp" }
+moba-serial = { path = "crates/moba-serial" }
+moba-telnet = { path = "crates/moba-telnet" }
+moba-rdp = { path = "crates/moba-rdp" }
+moba-vnc = { path = "crates/moba-vnc" }
+moba-x11 = { path = "crates/moba-x11" }
+moba-vault = { path = "crates/moba-vault" }
+moba-net = { path = "crates/moba-net" }
+moba-editor = { path = "crates/moba-editor" }
+moba-macros = { path = "crates/moba-macros" }
+moba-gui = { path = "crates/moba-gui" }
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+strip = true

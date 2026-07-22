@@ -1,0 +1,77 @@
+# MobaRust E2E Test Bed
+#
+# Provides throwaway servers for integration/E2E testing:
+# - OpenSSH sshd (+SFTP)
+# - Telnet server
+# - TigerVNC
+# - xrdp
+# - Serial PTY pair (socat)
+# - Minimal X client (xclock)
+#
+# Tests spin these up, assert, and tear down. Not for production use.
+
+services:
+  sshd:
+    image: linuxserver/openssh-server:latest
+    container_name: mobarust-test-sshd
+    environment:
+      - USER_NAME=testuser
+      - USER_PASSWORD=testpass
+      - PASSWORD_ACCESS=true
+      - PUID=1000
+      - PGID=1000
+    ports:
+      - "2222:2222"
+    tmpfs:
+      - /tmp
+    healthcheck:
+      test: ["CMD", "ssh", "-o", "StrictHostKeyChecking=no", "-p", "2222", "testuser@localhost", "echo", "ok"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  telnet:
+    image: telnet-server:local
+    container_name: mobarust-test-telnet
+    build:
+      context: ./test-images/telnet
+      dockerfile: Dockerfile
+    ports:
+      - "2300:23"
+    profiles: ["m8"]
+
+  vnc:
+    image: vnc-server:local
+    container_name: mobarust-test-vnc
+    build:
+      context: ./test-images/vnc
+      dockerfile: Dockerfile
+    ports:
+      - "5900:5900"
+    profiles: ["m8"]
+
+  xrdp:
+    image: xrdp-server:local
+    container_name: mobarust-test-xrdp
+    build:
+      context: ./test-images/xrdp
+      dockerfile: Dockerfile
+    ports:
+      - "3389:3389"
+    profiles: ["m8"]
+
+  serial:
+    image: socat-serial:local
+    container_name: mobarust-test-serial
+    build:
+      context: ./test-images/serial
+      dockerfile: Dockerfile
+    profiles: ["m8"]
+
+  xclient:
+    image: xclient:local
+    container_name: mobarust-test-xclient
+    build:
+      context: ./test-images/xclient
+      dockerfile: Dockerfile
+    profiles: ["m10"]

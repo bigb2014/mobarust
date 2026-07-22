@@ -1,0 +1,73 @@
+#!/usr/bin/env bash
+# scripts/check — the single quality-gate script for MobaRust.
+# Must exit 0 for a green build. Run from the workspace root.
+#
+# Gates:
+#   1. cargo fmt --check
+#   2. cargo clippy -D warnings
+#   3. cargo build --release
+#   4. cargo test (unit + integration)
+#   5. cargo test --features e2e (E2E; skipped if docker unavailable)
+#   6. grep guards (stubs, panics, debug leftovers, non-ASCII, lint suppression)
+
+set -euo pipefail
+
+echo "=== 1/7 cargo fmt --check ==="
+cargo fmt --all -- --check
+
+echo "=== 2/7 cargo clippy ==="
+cargo clippy --all-targets --all-features -- -D warnings
+
+echo "=== 3/7 cargo build --release ==="
+cargo build --all --release
+
+echo "=== 4/7 cargo test (unit + integration) ==="
+cargo test --all
+
+echo "=== 5/7 cargo test --features e2e ==="
+if docker info >/dev/null 2>&1; then
+    cargo test --all --features e2e
+else
+    echo "SKIP: docker not available for E2E tests"
+fi
+
+echo "=== 6/7 grep guards ==="
+# Stubs in production code
+if rg -nP 'todo!\(|unimplemented!\(|unreachable!\(' --type rust crates/*/src 2>/dev/null; then
+    echo "FAIL: stubs found in production code"
+    exit 1
+fi
+
+# Panicking calls in non-test code
+if rg -nP '\.unwrap\(\)|\.expect\(|panic!\(' --type rust crates/*/src 2>/dev/null \
+    | rg -v 'tests?/|#\[cfg\(test\)\]'; then
+    echo "FAIL: panicking calls in non-test code"
+    exit 1
+fi
+
+# Debug leftovers in library crates
+if rg -nP '\bdbg!\(|println!\(|eprintln!\(' --type rust crates 2>/dev/null \
+    | rg -v 'moba-gui/src/main\.rs'; then
+    echo "FAIL: debug leftovers in library crates"
+    exit 1
+fi
+
+# Lint suppression
+if rg -nP '#\[allow\(' --type rust 2>/dev/null; then
+    echo "WARN: lint suppression found (each needs justification)"
+fi
+
+# Non-ASCII leakage
+if rg -nP '[^\x00-\x7F]' --type rust 2>/dev/null; then
+    echo "FAIL: non-ASCII bytes in Rust source"
+    exit 1
+fi
+
+# Ignored tests without tracking task
+if rg -nP '#\[ignore\]' --type rust 2>/dev/null | rg -v 'TASK-'; then
+    echo "FAIL: ignored tests without tracking task"
+    exit 1
+fi
+
+echo "=== 7/7 done ==="
+echo "All gates passed."

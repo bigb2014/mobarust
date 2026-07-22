@@ -1,0 +1,29 @@
+# MobaRust Development Container
+services:
+  mobarust-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    container_name: mobarust-dev
+    volumes:
+      # Mount the project source
+      - .:/workspace
+      # Persist cargo registry/git cache across rebuilds
+      - cargo-cache:/usr/local/cargo/registry
+      - cargo-git:/usr/local/cargo/git
+      # Persist target directory for incremental builds
+      - cargo-target:/workspace/target
+    working_dir: /workspace
+    # Keep running for interactive use
+    tty: true
+    stdin_open: true
+    # Run as root to avoid permission issues with cargo cache volumes
+    user: "0:0"
+    environment:
+      - CARGO_HOME=/usr/local/cargo
+      - RUST_BACKTRACE=1
+
+volumes:
+  cargo-cache:
+  cargo-git:
+  cargo-target:
