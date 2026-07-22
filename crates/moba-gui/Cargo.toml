@@ -5,6 +5,10 @@ edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
 
+[features]
+default = []
+e2e = []
+
 [dependencies]
 serde = { workspace = true }
 thiserror = { workspace = true }
@@ -23,3 +27,9 @@ moba-vault = { workspace = true }
 moba-net = { workspace = true }
 moba-editor = { workspace = true }
 moba-macros = { workspace = true }
+eframe = "0.35.0"
+egui = "0.35.0"
+epi = "0.17.0"
+
+[dev-dependencies]
+egui_kittest = "0.35.0"
