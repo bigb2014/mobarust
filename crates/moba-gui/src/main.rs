@@ -7,8 +7,7 @@
 
 use eframe::egui;
 
-fn main() -> eframe::Result<()> {
-    // Set up tracing.
+fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env()
@@ -19,17 +18,22 @@ fn main() -> eframe::Result<()> {
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_title("MobaRust")
-            .with_inner_size([800.0, 600.0]),
+            .with_inner_size([800.0, 600.0])
+            .with_position(egui::Pos2::new(100.0, 100.0))
+            .with_visible(true)
+            .with_active(true),
+        renderer: eframe::Renderer::Glow,
         ..Default::default()
     };
 
-    eframe::run_native(
-        "MobaRust",
-        options,
-        Box::new(|_cc| {
-            Ok(Box::new(moba_gui::MobaApp::new(24, 80).map_err(|e| {
-                eframe::Error::AppCreation(Box::new(std::io::Error::other(e)))
-            })?))
-        }),
-    )
+    let app = match moba_gui::MobaApp::new(24, 80) {
+        Ok(app) => app,
+        Err(e) => {
+            tracing::error!("PTY spawn failed: {e}");
+            moba_gui::MobaApp::new_empty(24, 80)
+        }
+    };
+
+    eframe::run_native("MobaRust", options, Box::new(move |_cc| Ok(Box::new(app))))?;
+    Ok(())
 }

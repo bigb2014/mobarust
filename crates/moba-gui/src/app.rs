@@ -1,7 +1,7 @@
 //! MobaRust application: multi-tab terminal with session sidebar.
 //!
-//! Ties together the tab manager, session sidebar, session dialog,
-//! terminal engine, and egui renderer into a working terminal app.
+//! PTY output is read on a background thread (not the UI thread)
+//! so the window stays responsive.
 
 use eframe::egui;
 
@@ -11,11 +11,8 @@ use crate::tabs::TabManager;
 
 /// The MobaRust application state.
 pub struct MobaApp {
-    /// Tab manager owning all terminal sessions.
     tabs: TabManager,
-    /// Session sidebar (left panel).
     sidebar: Sidebar,
-    /// Session create/edit/delete dialog.
     dialog: SessionDialog,
 }
 
@@ -27,7 +24,6 @@ impl MobaApp {
     pub fn new(rows: usize, cols: usize) -> Result<Self, String> {
         let mut tabs = TabManager::new(rows, cols);
         tabs.new_tab(Some("Local Shell"))?;
-
         Ok(Self {
             tabs,
             sidebar: Sidebar::new(),
@@ -35,31 +31,34 @@ impl MobaApp {
         })
     }
 
+    /// Creates a new MobaRust app without any tabs.
+    #[must_use]
+    pub fn new_empty(rows: usize, cols: usize) -> Self {
+        Self {
+            tabs: TabManager::new(rows, cols),
+            sidebar: Sidebar::new(),
+            dialog: SessionDialog::new(),
+        }
+    }
+
     /// Returns a reference to the tab manager.
     #[must_use]
     pub fn tabs(&self) -> &TabManager {
         &self.tabs
     }
-
-    /// Returns a mutable reference to the tab manager.
-    pub fn tabs_mut(&mut self) -> &mut TabManager {
-        &mut self.tabs
-    }
-
-    /// Returns a mutable reference to the sidebar.
-    pub fn sidebar_mut(&mut self) -> &mut Sidebar {
-        &mut self.sidebar
-    }
 }
 
 impl eframe::App for MobaApp {
     fn logic(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        // Poll all tabs — this is now non-blocking (uses try_recv on a channel).
         self.tabs.poll_all();
 
+        // Request repaint to keep the terminal updating.
         if self.tabs.tabs().iter().any(|t| t.alive) {
-            ctx.request_repaint();
+            ctx.request_repaint_after(std::time::Duration::from_millis(50));
         }
 
+        // Process sidebar actions.
         for action in self.sidebar.drain_actions() {
             match action {
                 crate::sidebar::SidebarAction::NewSession => {
@@ -75,6 +74,7 @@ impl eframe::App for MobaApp {
             }
         }
 
+        // Show dialog if open.
         if let Some(result) = self.dialog.show(ctx) {
             match result {
                 DialogResult::Save(_) => {
@@ -87,32 +87,33 @@ impl eframe::App for MobaApp {
     }
 
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        // Sidebar.
         self.sidebar.show(ui);
 
+        // Tab bar.
         let mut close_index: Option<usize> = None;
         let mut switch_index: Option<usize> = None;
         let mut add_tab = false;
 
-        egui::Panel::top("tab_bar")
-            .show_separator_line(false)
-            .show(ui, |ui| {
-                ui.horizontal(|ui| {
-                    for (i, tab) in self.tabs.tabs().iter().enumerate() {
-                        let is_active = self.tabs.active_index() == Some(i);
-                        let label = format!("{} {}", if is_active { ">" } else { " " }, tab.label);
-                        if ui.selectable_label(is_active, &label).clicked() {
-                            switch_index = Some(i);
-                        }
-                        if ui.button("x").clicked() {
-                            close_index = Some(i);
-                        }
-                    }
-                    if ui.button("+").clicked() {
-                        add_tab = true;
-                    }
-                });
-            });
+        ui.horizontal(|ui| {
+            for (i, tab) in self.tabs.tabs().iter().enumerate() {
+                let is_active = self.tabs.active_index() == Some(i);
+                let label = format!("{} {}", if is_active { ">" } else { " " }, tab.label);
+                if ui.selectable_label(is_active, &label).clicked() {
+                    switch_index = Some(i);
+                }
+                if ui.button("x").clicked() {
+                    close_index = Some(i);
+                }
+            }
+            if ui.button("+").clicked() {
+                add_tab = true;
+            }
+        });
 
+        ui.separator();
+
+        // Apply tab actions.
         if let Some(i) = switch_index {
             self.tabs.switch_to(i);
         }
@@ -123,36 +124,32 @@ impl eframe::App for MobaApp {
             let _ = self.tabs.new_tab(Some("New Tab"));
         }
 
-        egui::CentralPanel::default().show(ui, |ui| {
-            if let Some(tab_index) = self.tabs.active_index() {
-                if let Some(tab) = self.tabs.tabs_mut().get_mut(tab_index) {
-                    let config = crate::term_view::TermViewConfig::default();
-                    let mut local_input: Vec<u8> = Vec::new();
-                    let input_ref = &mut local_input;
-                    let term_view = crate::term_view::TermView::new(
-                        &mut tab.terminal,
-                        config,
-                        move |bytes: &[u8]| {
-                            input_ref.extend_from_slice(bytes);
-                        },
-                    );
-                    term_view.show(ui);
-                    if !local_input.is_empty() {
-                        tab.send_input(&local_input);
-                    }
-
-                    if !tab.alive {
-                        ui.label(
-                            egui::RichText::new("[process exited]")
-                                .color(egui::Color32::from_rgb(0xff, 0x80, 0x80)),
-                        );
-                    }
+        // Terminal view.
+        if let Some(tab_index) = self.tabs.active_index() {
+            if let Some(tab) = self.tabs.tabs_mut().get_mut(tab_index) {
+                let config = crate::term_view::TermViewConfig::default();
+                let mut local_input: Vec<u8> = Vec::new();
+                let input_ref = &mut local_input;
+                let term_view =
+                    crate::term_view::TermView::new(&mut tab.terminal, config, move |bytes: &[u8]| {
+                        input_ref.extend_from_slice(bytes);
+                    });
+                term_view.show(ui);
+                if !local_input.is_empty() {
+                    tab.send_input(&local_input);
                 }
-            } else {
-                ui.vertical_centered(|ui| {
-                    ui.label("No tabs open. Click + to open a new tab.");
-                });
+
+                if !tab.alive {
+                    ui.label(
+                        egui::RichText::new("[process exited]")
+                            .color(egui::Color32::from_rgb(0xff, 0x80, 0x80)),
+                    );
+                }
             }
-        });
+        } else {
+            ui.vertical_centered(|ui| {
+                ui.label("No tabs open. Click + to open a new tab.");
+            });
+        }
     }
 }

@@ -2,6 +2,9 @@
 //!
 //! Each tab owns a PTY session and a terminal engine. The tab manager
 //! tracks the active tab and provides create/switch/close operations.
+//! PTY output is read on a background thread to avoid blocking the UI.
+
+use std::sync::mpsc;
 
 use moba_term::pty::PtySession;
 use moba_term::Terminal;
@@ -20,6 +23,8 @@ pub struct TerminalTab {
     pub input_buf: Vec<u8>,
     /// Whether the terminal process is still alive.
     pub alive: bool,
+    /// Receiver for PTY output from the background reader thread.
+    pty_rx: Option<mpsc::Receiver<Vec<u8>>>,
 }
 
 impl TerminalTab {
@@ -29,7 +34,29 @@ impl TerminalTab {
     /// Returns an error string if the PTY cannot be spawned.
     pub fn new_local(id: usize, label: &str, rows: usize, cols: usize) -> Result<Self, String> {
         let terminal = Terminal::new(rows, cols);
-        let pty = PtySession::new(rows, cols).map_err(|e| format!("pty spawn failed: {e}"))?;
+        let mut pty = PtySession::new(rows, cols).map_err(|e| format!("pty spawn failed: {e}"))?;
+
+        // Take the reader and spawn a background thread to read PTY output.
+        let reader = pty.take_reader();
+        let (tx, rx) = mpsc::channel::<Vec<u8>>();
+
+        if let Some(mut reader) = reader {
+            std::thread::spawn(move || {
+                let mut buf = [0u8; 4096];
+                loop {
+                    match std::io::Read::read(&mut reader, &mut buf) {
+                        Ok(0) => break,
+                        Ok(n) => {
+                            if tx.send(buf[..n].to_vec()).is_err() {
+                                break;
+                            }
+                        }
+                        Err(_) => break,
+                    }
+                }
+            });
+        }
+
         Ok(Self {
             id,
             label: label.to_string(),
@@ -37,6 +64,7 @@ impl TerminalTab {
             pty: Some(pty),
             input_buf: Vec::new(),
             alive: true,
+            pty_rx: Some(rx),
         })
     }
 
@@ -49,41 +77,35 @@ impl TerminalTab {
             pty: None,
             input_buf: Vec::new(),
             alive: false,
+            pty_rx: None,
         }
     }
 
-    /// Polls the PTY for output and processes it through the terminal.
+    /// Drains PTY output from the background reader thread and processes
+    /// it through the terminal engine. Non-blocking.
     pub fn poll(&mut self) {
-        if let Some(ref mut pty) = self.pty {
-            if self.alive {
-                let mut buf = [0u8; 4096];
-                match pty.read(&mut buf) {
-                    Ok(0) => self.alive = false,
-                    Ok(n) => self.terminal.process(&buf[..n]),
-                    Err(ref e) => {
-                        if let moba_term::pty::TermError::Io(ref io_err) = e {
-                            if io_err.kind() == std::io::ErrorKind::WouldBlock
-                                || io_err.kind() == std::io::ErrorKind::TimedOut
-                            {
-                                return;
-                            }
-                        }
-                        tracing::warn!("tab {} pty read error: {}", self.id, e);
-                        self.alive = false;
-                    }
-                }
+        // Drain any PTY output from the background thread (non-blocking).
+        if let Some(ref rx) = self.pty_rx {
+            while let Ok(data) = rx.try_recv() {
+                self.terminal.process(&data);
+            }
+        }
 
-                if !self.input_buf.is_empty() {
-                    if let Err(e) = pty.write(&self.input_buf) {
-                        tracing::warn!("tab {} pty write error: {}", self.id, e);
-                    }
-                    self.input_buf.clear();
-                }
+        // Check if child is still alive.
+        if let Some(ref pty) = self.pty {
+            if !pty.is_alive() {
+                self.alive = false;
+            }
+        }
 
-                if !pty.is_alive() {
-                    self.alive = false;
+        // Send any pending input to the PTY (non-blocking write).
+        if self.alive && !self.input_buf.is_empty() {
+            if let Some(ref mut pty) = self.pty {
+                if let Err(e) = pty.write(&self.input_buf) {
+                    tracing::warn!("tab {} pty write error: {}", self.id, e);
                 }
             }
+            self.input_buf.clear();
         }
     }
 
@@ -221,7 +243,7 @@ impl TabManager {
         }
     }
 
-    /// Polls all tabs for PTY output.
+    /// Polls all tabs for PTY output (non-blocking).
     pub fn poll_all(&mut self) {
         for tab in &mut self.tabs {
             tab.poll();
@@ -299,7 +321,6 @@ mod tests {
         mgr.new_disconnected_tab("A");
         mgr.new_disconnected_tab("B");
         mgr.new_disconnected_tab("C");
-        // Active is at index 2 ("C")
         mgr.close_tab(2);
         assert_eq!(mgr.active_tab().unwrap().label, "B");
     }
