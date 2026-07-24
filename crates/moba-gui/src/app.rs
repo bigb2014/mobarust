@@ -50,7 +50,7 @@ impl MobaApp {
 
 impl eframe::App for MobaApp {
     fn logic(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        // Poll all tabs — this is now non-blocking (uses try_recv on a channel).
+        // Poll all tabs — non-blocking (uses try_recv on a channel).
         self.tabs.poll_all();
 
         // Request repaint to keep the terminal updating.
@@ -65,6 +65,9 @@ impl eframe::App for MobaApp {
                     self.dialog.open_create();
                 }
                 crate::sidebar::SidebarAction::OpenSession(_) => {
+                    // For now, opening a session creates a local shell tab.
+                    // SSH connection will be wired in when the session config
+                    // is passed through to the tab manager.
                     let _ = self.tabs.new_tab(Some("New Session"));
                 }
                 crate::sidebar::SidebarAction::EditSession(_) => {
@@ -77,8 +80,14 @@ impl eframe::App for MobaApp {
         // Show dialog if open.
         if let Some(result) = self.dialog.show(ctx) {
             match result {
-                DialogResult::Save(_) => {
-                    let _ = self.tabs.new_tab(Some("New Session"));
+                DialogResult::Save(form) => {
+                    // Create a tab with the session name.
+                    let label = if form.name.is_empty() {
+                        "New Session"
+                    } else {
+                        &form.name
+                    };
+                    let _ = self.tabs.new_tab(Some(label));
                 }
                 DialogResult::Delete(_) => {}
                 DialogResult::Cancel => {}
@@ -87,69 +96,88 @@ impl eframe::App for MobaApp {
     }
 
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
-        // Sidebar.
-        self.sidebar.show(ui);
-
-        // Tab bar.
-        let mut close_index: Option<usize> = None;
-        let mut switch_index: Option<usize> = None;
-        let mut add_tab = false;
-
+        // Layout: horizontal split with sidebar (left) and main area (right).
         ui.horizontal(|ui| {
-            for (i, tab) in self.tabs.tabs().iter().enumerate() {
-                let is_active = self.tabs.active_index() == Some(i);
-                let label = format!("{} {}", if is_active { ">" } else { " " }, tab.label);
-                if ui.selectable_label(is_active, &label).clicked() {
-                    switch_index = Some(i);
+            // Left: sidebar (fixed width 200px).
+            ui.allocate_ui_with_layout(
+                egui::Vec2::new(200.0, ui.available_height()),
+                egui::Layout::top_down(egui::Align::LEFT),
+                |ui| {
+                    self.sidebar.show(ui);
+                },
+            );
+
+            // Separator.
+            ui.separator();
+
+            // Right: tab bar + terminal.
+            ui.vertical(|ui| {
+                // Tab bar.
+                let mut close_index: Option<usize> = None;
+                let mut switch_index: Option<usize> = None;
+                let mut add_tab = false;
+
+                ui.horizontal(|ui| {
+                    for (i, tab) in self.tabs.tabs().iter().enumerate() {
+                        let is_active = self.tabs.active_index() == Some(i);
+                        let label = format!("{} {}", if is_active { ">" } else { " " }, tab.label);
+                        if ui.selectable_label(is_active, &label).clicked() {
+                            switch_index = Some(i);
+                        }
+                        if ui.button("x").clicked() {
+                            close_index = Some(i);
+                        }
+                    }
+                    if ui.button("+").clicked() {
+                        add_tab = true;
+                    }
+                });
+
+                ui.separator();
+
+                // Apply tab actions.
+                if let Some(i) = switch_index {
+                    self.tabs.switch_to(i);
                 }
-                if ui.button("x").clicked() {
-                    close_index = Some(i);
+                if let Some(i) = close_index {
+                    self.tabs.close_tab(i);
                 }
-            }
-            if ui.button("+").clicked() {
-                add_tab = true;
-            }
-        });
+                if add_tab {
+                    let _ = self.tabs.new_tab(Some("New Tab"));
+                }
 
-        ui.separator();
+                // Terminal view.
+                if let Some(tab_index) = self.tabs.active_index() {
+                    if let Some(tab) = self.tabs.tabs_mut().get_mut(tab_index) {
+                        let config = crate::term_view::TermViewConfig::default();
+                        let mut local_input: Vec<u8> = Vec::new();
+                        let input_ref = &mut local_input;
+                        let term_view = crate::term_view::TermView::new(
+                            &mut tab.terminal,
+                            config,
+                            move |bytes: &[u8]| {
+                                input_ref.extend_from_slice(bytes);
+                            },
+                        );
+                        term_view.show(ui);
 
-        // Apply tab actions.
-        if let Some(i) = switch_index {
-            self.tabs.switch_to(i);
-        }
-        if let Some(i) = close_index {
-            self.tabs.close_tab(i);
-        }
-        if add_tab {
-            let _ = self.tabs.new_tab(Some("New Tab"));
-        }
+                        if !local_input.is_empty() {
+                            tab.send_input(&local_input);
+                        }
 
-        // Terminal view.
-        if let Some(tab_index) = self.tabs.active_index() {
-            if let Some(tab) = self.tabs.tabs_mut().get_mut(tab_index) {
-                let config = crate::term_view::TermViewConfig::default();
-                let mut local_input: Vec<u8> = Vec::new();
-                let input_ref = &mut local_input;
-                let term_view =
-                    crate::term_view::TermView::new(&mut tab.terminal, config, move |bytes: &[u8]| {
-                        input_ref.extend_from_slice(bytes);
+                        if !tab.alive {
+                            ui.label(
+                                egui::RichText::new("[process exited]")
+                                    .color(egui::Color32::from_rgb(0xff, 0x80, 0x80)),
+                            );
+                        }
+                    }
+                } else {
+                    ui.vertical_centered(|ui| {
+                        ui.label("No tabs open. Click + to open a new tab.");
                     });
-                term_view.show(ui);
-                if !local_input.is_empty() {
-                    tab.send_input(&local_input);
                 }
-
-                if !tab.alive {
-                    ui.label(
-                        egui::RichText::new("[process exited]")
-                            .color(egui::Color32::from_rgb(0xff, 0x80, 0x80)),
-                    );
-                }
-            }
-        } else {
-            ui.vertical_centered(|ui| {
-                ui.label("No tabs open. Click + to open a new tab.");
             });
-        }
+        });
     }
 }

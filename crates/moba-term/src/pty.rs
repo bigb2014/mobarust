@@ -155,8 +155,7 @@ impl PtySession {
     /// Takes ownership of the reader handle so it can be moved to a
     /// background thread. After calling this, `read()` will return an error.
     pub fn take_reader(&mut self) -> Option<Box<dyn Read + Send>> {
-        std::mem::replace(&mut self.reader, Box::new(std::io::empty()))
-            .into()
+        std::mem::replace(&mut self.reader, Box::new(std::io::empty())).into()
     }
 
     /// Writes `data` to the PTY master.

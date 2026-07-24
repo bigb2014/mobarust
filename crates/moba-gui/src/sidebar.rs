@@ -1,7 +1,4 @@
 //! Session tree sidebar: lists saved sessions, click to open.
-//!
-//! Renders a tree of session groups with their sessions in an egui side panel.
-//! Clicking a session emits an action (open, edit, delete).
 
 /// Actions emitted by the sidebar when the user interacts with it.
 #[derive(Clone, Debug)]
@@ -53,11 +50,11 @@ impl Sidebar {
         std::mem::take(&mut self.actions)
     }
 
-    /// Renders the sidebar in the given context.
+    /// Renders the sidebar as a fixed-width column inside the given Ui.
     pub fn show(&mut self, ui: &mut egui::Ui) {
-        egui::Panel::left("session_sidebar")
-            .default_size(200.0)
-            .resizable(true)
+        // Use a fixed-width vertical column instead of a Panel.
+        egui::ScrollArea::vertical()
+            .max_width(200.0)
             .show(ui, |ui| {
                 ui.heading("Sessions");
                 ui.separator();
@@ -86,17 +83,21 @@ impl Sidebar {
                     );
                     for (id, label) in sessions {
                         let is_selected = self.selected.as_deref() == Some(id.as_str());
-                        let response = ui.selectable_label(is_selected, label);
-                        if response.clicked() {
+                        if ui.selectable_label(is_selected, label).clicked() {
                             self.selected = Some(id.clone());
                             self.actions.push(SidebarAction::OpenSession(id.clone()));
                         }
-                        let edit_response = response.clone();
-                        if edit_response.hovered() && ui.input(|i| i.pointer.secondary_clicked()) {
-                            self.actions.push(SidebarAction::EditSession(id.clone()));
-                        }
                     }
                     ui.separator();
+                }
+
+                if self.sessions.is_empty() {
+                    ui.label(
+                        egui::RichText::new(
+                            "No saved sessions.\nClick + New Session to create one.",
+                        )
+                        .weak(),
+                    );
                 }
             });
     }
